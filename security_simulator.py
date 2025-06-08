@@ -20,6 +20,18 @@ home_state = {
     "temp_trend": 0.1
 }
 
+# --- Device Attributes (sent once after connection) ---
+ATTRIBUTES = {
+    "device_id": "home001",
+    "device_type": "home_simulator",
+    "firmware_version": "1.0",
+    "rooms": ["living_room", "kitchen", "bedroom1", "bedroom2", "bathroom"],
+    "location": {"lat": 37.7749, "lon": -122.4194}
+}
+
+# --- Customizable Reporting Interval ---
+REPORT_INTERVAL = 10  # seconds
+
 def get_realistic_home_data():
     """Generate realistic home security data based on time and patterns"""
     current_hour = datetime.now().hour
@@ -89,37 +101,26 @@ def get_realistic_home_data():
     
     # Security system status
     system_status = "ARMED" if home_state["occupancy_mode"] == "away" else "DISARMED"
-    
-    # data = {
-    #     "main_door_status": main_door,
-    #     "kitchen_door_status": kitchen_door,
-    #     "bedroom1_door_status": bedroom1_door,
-    #     "bedroom2_door_status": bedroom2_door,
-    #     "bathroom_door_status": bathroom_door,
-    #     "living_room_motion": living_room_motion,
-    #     "kitchen_motion": kitchen_motion,
-    #     "living_room_window_status": living_room_window,
-    #     "kitchen_smoke_detector": kitchen_smoke,
-    #     "internal_temperature": internal_temperature,
-    #     "occupancy_mode": home_state["occupancy_mode"],
-    #     "system_status": system_status,
-    #     "timestamp": int(time.time() * 1000)  # Timestamp in milliseconds
-    # }
+
+    # Intrusion alert: rare, only if motion detected in away mode
+    intrusion_alert = 1 if home_state["occupancy_mode"] == "away" and (living_room_motion or kitchen_motion) else 0
+
     data = {
-    "main_door_status": main_door,
-    "kitchen_door_status": kitchen_door,
-    "bedroom1_door_status": bedroom1_door,
-    "bedroom2_door_status": bedroom2_door,
-    "bathroom_door_status": bathroom_door,
-    "living_room_motion": living_room_motion,
-    "kitchen_motion": kitchen_motion,
-    "living_room_window_status": living_room_window,
-    "kitchen_smoke_detector": kitchen_smoke,
-    "internal_temperature": internal_temperature,
-    "occupancy_mode": home_state["occupancy_mode"],
-    "system_status": system_status,
-    "timestamp": int(time.time() * 1000),
-    "room": "all"  # Added for possible filtering
+        "main_door_status": main_door,
+        "kitchen_door_status": kitchen_door,
+        "bedroom1_door_status": bedroom1_door,
+        "bedroom2_door_status": bedroom2_door,
+        "bathroom_door_status": bathroom_door,
+        "living_room_motion": living_room_motion,
+        "kitchen_motion": kitchen_motion,
+        "living_room_window_status": living_room_window,
+        "kitchen_smoke_detector": kitchen_smoke,
+        "internal_temperature": internal_temperature,
+        "occupancy_mode": home_state["occupancy_mode"],
+        "system_status": system_status,
+        "timestamp": int(time.time() * 1000),
+        "room": "all",  # Added for possible filtering
+        "intrusion_alert": intrusion_alert
     }
     
     return data
@@ -142,11 +143,18 @@ try:
     print("🏠 Starting Enhanced Home Security Simulator...")
     print(f"🌐 Connecting to ThingsBoard: {THINGSBOARD_HOST}")
     print(f"🔑 Using token: {ACCESS_TOKEN[:8]}...")
-    
     client.connect(THINGSBOARD_HOST, 1883, 60)
     client.loop_start()
-    
-    print("🚀 Simulator started! Sending realistic home security data every 15 seconds.")
+
+    # Send device attributes once after connection
+    time.sleep(1)  # Give time for connection
+    if client.is_connected():
+        client.publish('v1/devices/me/attributes', json.dumps(ATTRIBUTES), qos=1)
+        print(f"📦 Sent device attributes: {json.dumps(ATTRIBUTES)}")
+    else:
+        print("❌ MQTT client not connected. Could not send attributes.")
+
+    print("🚀 Simulator started! Sending realistic home security data every", REPORT_INTERVAL, "seconds.")
     print("📊 Data includes: Doors, Motion, Window, Smoke, Temperature, and System Status")
     print("⏰ Simulation adapts based on time of day (Home/Away/Night modes)")
     print("Press Ctrl+C to stop.\n")
@@ -154,27 +162,62 @@ try:
     while True:
         telemetry_data = get_realistic_home_data()
 
-        # Publish main telemetry data (all sensors)
-        main_payload = json.dumps(telemetry_data, indent=2)
-        print(f"🏠 Mode: {telemetry_data['occupancy_mode'].upper()} | 🌡️ Temp: {telemetry_data['internal_temperature']}°C")
-        print(f"📤 Sending: {main_payload}")
+        # Add battery simulation
+        battery_level = round(random.uniform(30.0, 100.0), 1)
+
+        # Build and send a well-structured payload for ThingsBoard visualization
+        home_payload = {
+            "device_id": ATTRIBUTES["device_id"],
+            "timestamp": telemetry_data["timestamp"],
+            "occupancy_mode": telemetry_data["occupancy_mode"],
+            "system_status": telemetry_data["system_status"],
+            "internal_temperature": telemetry_data["internal_temperature"],
+            "intrusion_alert": telemetry_data["intrusion_alert"],
+            "battery_level": battery_level,
+            "doors": {
+                "main": telemetry_data["main_door_status"],
+                "kitchen": telemetry_data["kitchen_door_status"],
+                "bedroom1": telemetry_data["bedroom1_door_status"],
+                "bedroom2": telemetry_data["bedroom2_door_status"],
+                "bathroom": telemetry_data["bathroom_door_status"]
+            },
+            "rooms": [
+                {
+                    "name": "living_room",
+                    "motion": telemetry_data["living_room_motion"],
+                    "window": telemetry_data["living_room_window_status"]
+                },
+                {
+                    "name": "kitchen",
+                    "motion": telemetry_data["kitchen_motion"],
+                    "smoke": telemetry_data["kitchen_smoke_detector"],
+                    "door": telemetry_data["kitchen_door_status"]
+                },
+                {
+                    "name": "bedroom1",
+                    "door": telemetry_data["bedroom1_door_status"]
+                },
+                {
+                    "name": "bedroom2",
+                    "door": telemetry_data["bedroom2_door_status"]
+                },
+                {
+                    "name": "bathroom",
+                    "door": telemetry_data["bathroom_door_status"]
+                }
+            ],
+            "location": ATTRIBUTES["location"]
+        }
+        payload = json.dumps(home_payload, indent=2)
+        print(f"📤 Sending structured home payload: {payload}")
         print("-" * 60)
-        result = client.publish('v1/devices/me/telemetry', json.dumps(telemetry_data), qos=1)
-        if result.rc != 0:
-            print(f"❌ Failed to publish data, error code: {result.rc}")
-
-        # Publish individual room data (for filtering or analytics)
-        room_data = [
-            {"room": "living_room", "motion": telemetry_data["living_room_motion"]},
-            {"room": "kitchen", "motion": telemetry_data["kitchen_motion"], "smoke": telemetry_data["kitchen_smoke_detector"]},
-            {"room": "bedroom1", "door": telemetry_data["bedroom1_door_status"]},
-            {"room": "bathroom", "door": telemetry_data["bathroom_door_status"]},
-        ]
-        for entry in room_data:
-            room_payload = json.dumps(entry)
-            client.publish('v1/devices/me/telemetry', room_payload, qos=1)
-
-        time.sleep(15)  # Send every 15 seconds
+        if client.is_connected():
+            result = client.publish('v1/devices/me/telemetry', payload, qos=1)
+            if result.rc != 0:
+                print(f"❌ Failed to publish data, error code: {result.rc}")
+        else:
+            print("❌ MQTT client not connected. Skipping publish.")
+        time.sleep(REPORT_INTERVAL)  # Use customizable interval
 
 except KeyboardInterrupt:
     print("\n🛑 Simulation stopped by user.")
