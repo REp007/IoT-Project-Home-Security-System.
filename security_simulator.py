@@ -33,7 +33,7 @@ ATTRIBUTES = {
 REPORT_INTERVAL = 10  # seconds
 
 def get_realistic_home_data():
-    """Generate realistic home security data based on time and patterns"""
+    """Generate realistic home security data as a flat dictionary for ThingsBoard telemetry"""
     current_hour = datetime.now().hour
     current_minute = datetime.now().minute
     
@@ -105,22 +105,71 @@ def get_realistic_home_data():
     # Intrusion alert: rare, only if motion detected in away mode
     intrusion_alert = 1 if home_state["occupancy_mode"] == "away" and (living_room_motion or kitchen_motion) else 0
 
+    # Simulate more home security data for each room
+    # Living Room
+    living_room_temp = round(random.uniform(20.0, 25.0), 1)
+    living_room_humidity = round(random.uniform(30.0, 60.0), 1)
+    living_room_light = random.randint(100, 600)
+    living_room_sound = round(random.uniform(30.0, 70.0), 1)
+    living_room_co2 = random.randint(400, 1200)
+    living_room_tv_on = random.choice([0, 1])
+    # Kitchen
+    kitchen_temp = round(random.uniform(19.0, 26.0), 1)
+    kitchen_gas_leak = 1 if random.random() < 0.01 else 0
+    kitchen_fridge_open = random.choice([0, 0, 1])
+    # Bedroom1
+    bedroom1_temp = round(random.uniform(18.0, 24.0), 1)
+    bedroom1_humidity = round(random.uniform(30.0, 55.0), 1)
+    bedroom1_light = random.randint(50, 400)
+    bedroom1_occupancy = random.choice([0, 1])
+    # Bedroom2
+    bedroom2_temp = round(random.uniform(18.0, 24.0), 1)
+    bedroom2_occupancy = random.choice([0, 1])
+    # Bathroom
+    bathroom_temp = round(random.uniform(19.0, 23.0), 1)
+    bathroom_humidity = round(random.uniform(40.0, 80.0), 1)
+    bathroom_water_leak = 1 if random.random() < 0.01 else 0
+    bathroom_fan_on = random.choice([0, 1])
+    # WiFi strength (dBm)
+    wifi_strength = random.randint(-70, -40)
+
     data = {
+        "device_id": ATTRIBUTES["device_id"],
+        "timestamp": int(time.time() * 1000),
+        "occupancy_mode": home_state["occupancy_mode"],
+        "system_status": system_status,
+        "internal_temperature": internal_temperature,
+        "intrusion_alert": intrusion_alert,
         "main_door_status": main_door,
         "kitchen_door_status": kitchen_door,
         "bedroom1_door_status": bedroom1_door,
         "bedroom2_door_status": bedroom2_door,
         "bathroom_door_status": bathroom_door,
         "living_room_motion": living_room_motion,
-        "kitchen_motion": kitchen_motion,
         "living_room_window_status": living_room_window,
+        "kitchen_motion": kitchen_motion,
         "kitchen_smoke_detector": kitchen_smoke,
-        "internal_temperature": internal_temperature,
-        "occupancy_mode": home_state["occupancy_mode"],
-        "system_status": system_status,
-        "timestamp": int(time.time() * 1000),
-        "room": "all",  # Added for possible filtering
-        "intrusion_alert": intrusion_alert
+        "location": ATTRIBUTES["location"],
+        "living_room_temp": living_room_temp,
+        "living_room_humidity": living_room_humidity,
+        "living_room_light": living_room_light,
+        "living_room_sound": living_room_sound,
+        "living_room_co2": living_room_co2,
+        "living_room_tv_on": living_room_tv_on,
+        "kitchen_temp": kitchen_temp,
+        "kitchen_gas_leak": kitchen_gas_leak,
+        "kitchen_fridge_open": kitchen_fridge_open,
+        "bedroom1_temp": bedroom1_temp,
+        "bedroom1_humidity": bedroom1_humidity,
+        "bedroom1_light": bedroom1_light,
+        "bedroom1_occupancy": bedroom1_occupancy,
+        "bedroom2_temp": bedroom2_temp,
+        "bedroom2_occupancy": bedroom2_occupancy,
+        "bathroom_temp": bathroom_temp,
+        "bathroom_humidity": bathroom_humidity,
+        "bathroom_water_leak": bathroom_water_leak,
+        "bathroom_fan_on": bathroom_fan_on,
+        "wifi_strength": wifi_strength
     }
     
     return data
@@ -161,55 +210,11 @@ try:
 
     while True:
         telemetry_data = get_realistic_home_data()
-
-        # Add battery simulation
+        # Add battery simulation HERE
         battery_level = round(random.uniform(30.0, 100.0), 1)
-
-        # Build and send a well-structured payload for ThingsBoard visualization
-        home_payload = {
-            "device_id": ATTRIBUTES["device_id"],
-            "timestamp": telemetry_data["timestamp"],
-            "occupancy_mode": telemetry_data["occupancy_mode"],
-            "system_status": telemetry_data["system_status"],
-            "internal_temperature": telemetry_data["internal_temperature"],
-            "intrusion_alert": telemetry_data["intrusion_alert"],
-            "battery_level": battery_level,
-            "doors": {
-                "main": telemetry_data["main_door_status"],
-                "kitchen": telemetry_data["kitchen_door_status"],
-                "bedroom1": telemetry_data["bedroom1_door_status"],
-                "bedroom2": telemetry_data["bedroom2_door_status"],
-                "bathroom": telemetry_data["bathroom_door_status"]
-            },
-            "rooms": [
-                {
-                    "name": "living_room",
-                    "motion": telemetry_data["living_room_motion"],
-                    "window": telemetry_data["living_room_window_status"]
-                },
-                {
-                    "name": "kitchen",
-                    "motion": telemetry_data["kitchen_motion"],
-                    "smoke": telemetry_data["kitchen_smoke_detector"],
-                    "door": telemetry_data["kitchen_door_status"]
-                },
-                {
-                    "name": "bedroom1",
-                    "door": telemetry_data["bedroom1_door_status"]
-                },
-                {
-                    "name": "bedroom2",
-                    "door": telemetry_data["bedroom2_door_status"]
-                },
-                {
-                    "name": "bathroom",
-                    "door": telemetry_data["bathroom_door_status"]
-                }
-            ],
-            "location": ATTRIBUTES["location"]
-        }
-        payload = json.dumps(home_payload, indent=2)
-        print(f"📤 Sending structured home payload: {payload}")
+        telemetry_data["battery_level"] = battery_level
+        payload = json.dumps(telemetry_data, indent=2)
+        print(f"📤 Sending flat telemetry payload: {payload}")
         print("-" * 60)
         if client.is_connected():
             result = client.publish('v1/devices/me/telemetry', payload, qos=1)
